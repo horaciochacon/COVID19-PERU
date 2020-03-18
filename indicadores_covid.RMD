@@ -1,0 +1,90 @@
+---
+title: "COVID19 Cummulative Cases Dashboard"
+output: 
+   flexdashboard::flex_dashboard:
+    orientation: columns
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+
+library(tidyverse)
+library(covid19viz)
+library(janitor)
+library(colorspace)
+library(ggthemr)
+library(flexdashboard)
+library(shinyWidgets)
+library(ggrepel)
+
+# Database reading ------------------------------------------------------------------
+options(scipen=999)
+
+dat <- jhu_sitrep_import(source = "confirmed") %>%
+  jhu_sitrep_cleandb() %>%
+  filter(value>0) %>%
+  group_by(country_region) %>%
+  mutate(start = first(dates),
+         d_start = dates-start,
+         per = ifelse(country_region =="Peru","Per","Otros"),
+         max_cases = max(value)) %>%
+  filter(max_cases>30)
+
+
+ggthemr('dust')
+
+
+```
+
+Inputs {.sidebar data-width=300}
+-----------------------------------------------------------------------
+
+```{r}
+
+pickerInput('Country','Country', sort(unique(dat$country_region)),
+            options = list(`actions-box` = TRUE),multiple = T, 
+            selected = c("Peru", "Brazil", "Colombia", "Ecuador", "Chile", "Argentina",  
+                         "Uruguay", "Paraguay", "Bolivia"))
+
+
+```
+
+Outputs
+-----------------------------------------------------------------------
+
+### Grafico
+
+```{r}
+
+renderPlot(
+  
+  dat %>%
+    filter(country_region %in% input$Country) %>% 
+    filter(per =="Otros") %>% 
+    ggplot(aes(x = d_start, y = value, group=country_region)) +
+    geom_line(aes(col = country_region), size = 1.2) +
+    geom_point(aes(col = country_region, shape = country_region), size = 2) +
+    geom_line(dat = dat %>%
+                filter(country_region %in% input$Country) %>% 
+                filter(per=="Per"), col = "red", size = 1.2) +
+    geom_point(dat = dat %>%
+                 filter(country_region %in% input$Country) %>% 
+                 filter(per=="Per"), col = "red", size = 2) +
+    geom_text_repel(data = dat %>%
+                filter(country_region %in% input$Country) %>% 
+                slice(n()) %>% filter(country_region!="Peru"),
+              aes(y = value, label = country_region, col = country_region), 
+              vjust=-.5, size = 7) +
+    geom_text_repel(data = dat %>%
+                filter(country_region %in% input$Country) %>% 
+                slice(n()) %>% filter(country_region=="Peru"),
+              aes(y = value, label = country_region), col = "red", vjust=-.5,
+              size = 7) +
+    scale_color_discrete_sequential(palette = "Teal", nmax = 14, order = 5:14) +
+    labs(color = "Paises", x = "Dias desde primer reporte", y = "Numero de casos", 
+         shape = "Paises") +
+    scale_y_log10() + 
+    theme(legend.position = "none")
+)
+
+```
